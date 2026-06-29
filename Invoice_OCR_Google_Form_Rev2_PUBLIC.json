@@ -1,0 +1,289 @@
+{
+  "name": "Invoice OCR - Google Form - Rev2",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## 📌 ENTRY POINT — Google Form Trigger\nThis workflow starts when a new row is added to the **Form Responses 1** sheet (linked to your Google Form).\n\n**Setup Required:**\n- Replace the Sheet ID below with your own Google Sheet ID\n- The form must collect: Invoice PDF URL, Industry, Destination Email, Expense Categories\n- Sheet must be connected via Google Sheets Trigger OAuth2 credential",
+        "height": 220,
+        "width": 380,
+        "color": 6
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-660, -160],
+      "id": "sticky-001",
+      "name": "Sticky Note - Entry Point"
+    },
+    {
+      "parameters": {
+        "content": "## ⚙️ SETUP REQUIRED — Google Sheets Trigger\nReplace these values:\n- `documentId` → Your Google Sheet ID\n- `sheetName` (gid) → Your Form Responses sheet tab ID\n- Credential → Connect your own Google Sheets OAuth2 account",
+        "height": 180,
+        "width": 300,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-660, 80],
+      "id": "sticky-002",
+      "name": "Sticky Note - Sheets Setup"
+    },
+    {
+      "parameters": {
+        "content": "## 📂 BRANCH — Loop Over Each PDF File\nEach form submission may contain multiple PDF URLs (comma-separated).\n\n- **Output 0 (done):** All files processed → Send Results Email\n- **Output 1 (loop):** Still files remaining → Download next file\n\nThis SplitInBatches node processes one file at a time.",
+        "height": 200,
+        "width": 320,
+        "color": 3
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-240, -140],
+      "id": "sticky-003",
+      "name": "Sticky Note - Loop Branch"
+    },
+    {
+      "parameters": {
+        "content": "## ⚙️ SETUP REQUIRED — Gemini API Key\nIn the **Gemini Vision OCR** HTTP Request node:\n- Replace `YOUR_GEMINI_API_KEY` in the URL with your actual key\n- Get your key at: https://aistudio.google.com/app/apikey\n- Model used: `gemini-2.5-flash`",
+        "height": 180,
+        "width": 300,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [400, 60],
+      "id": "sticky-004",
+      "name": "Sticky Note - Gemini Key"
+    },
+    {
+      "parameters": {
+        "content": "## ⚙️ SETUP REQUIRED — Output Google Sheet\nIn **Append row in sheet** node:\n- Replace Sheet ID with your results sheet ID\n- Ensure the sheet has these columns: `timestamp`, `industry`, `date_of_invoice`, `invoice_no`, `supplier_name`, `product`, `type_of_expenses`\n- Connect your Google Sheets OAuth2 credential",
+        "height": 200,
+        "width": 320,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [170, 580],
+      "id": "sticky-005",
+      "name": "Sticky Note - Output Sheet"
+    },
+    {
+      "parameters": {
+        "content": "## ⚠️ EDGE CASE — Multi-Product Invoices\nThe **Parse Invoice Fields** node splits invoices with multiple line items into separate rows — one row per product.\n\nIf Gemini returns an empty product list, a fallback row with `UNKNOWN` is written to prevent data loss.\n\nEnsure your Expense Categories in the form match exactly what you want Gemini to classify into.",
+        "height": 180,
+        "width": 320,
+        "color": 1
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-200, 580],
+      "id": "sticky-006",
+      "name": "Sticky Note - Edge Case"
+    },
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Form Responses 1",
+          "mode": "name"
+        },
+        "event": "rowAdded",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheetsTrigger",
+      "typeVersion": 1,
+      "position": [-624, 96],
+      "id": "2cee72b7-7a98-491d-bdc3-8e59c2fbdeec",
+      "name": "Google Sheets Trigger"
+    },
+    {
+      "parameters": {
+        "jsCode": "const row = $('Google Sheets Trigger').item.json;\n\n// Skip empty rows\nif (!row['Upload Invoice Files (PDF)  '] || !row['Destination Email Address  ']) {\n  return [];\n}\n\nconst rawUrls = row['Upload Invoice Files (PDF)  '] ?? '';\nconst industry = row['Industry'] ?? '';\nconst email = row['Destination Email Address  '] ?? '';\nconst expenseCategories = row['Expense Categories'] ?? '';\n\nconst urls = rawUrls.split(',').map(u => u.trim()).filter(u => u.length > 0);\n\nconst files = urls.map(url => {\n  const match = url.match(/id=([a-zA-Z0-9_-]+)/);\n  const fileId = match ? match[1] : null;\n  return { fileId, url, industry, email, expenseCategories };\n});\n\nreturn files.map(f => ({ json: f }));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-416, 96],
+      "id": "ccf08b85-5727-4c0e-8d2f-df0fe2ae1a20",
+      "name": "Get File IDs"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [-208, 96],
+      "id": "4b04bfbc-eaa8-4640-924c-40afbe951bf0",
+      "name": "Loop Over Files"
+    },
+    {
+      "parameters": {
+        "jsCode": "const binaryData = $('Download File').item.binary.data;\nconst base64 = binaryData.data;\nconst mimeType = binaryData.mimeType ?? 'application/pdf';\n\nconst isImage = mimeType.startsWith('image/');\nconst finalMimeType = isImage ? mimeType : 'application/pdf';\n\nconst industry = $('Get File IDs').item.json.industry;\nconst email = $('Get File IDs').item.json.email;\nconst expenseCategories = $('Get File IDs').item.json.expenseCategories;\n\nconst geminiBody = JSON.stringify({\n  contents: [{\n    parts: [\n      {\n        inlineData: {\n          mimeType: finalMimeType,\n          data: base64\n        }\n      },\n      {\n        text: `You are an invoice data extraction assistant. The company submitting this invoice operates in the ${industry} industry.\\n\\nExtract all invoice data and return ONLY valid JSON with these fields:\\n- invoice_no\\n- supplier_name\\n- date_of_invoice (YYYY-MM-DD format)\\n- products (return as a JSON array, one entry per line item. Each entry is a string of the product/service name)\\n- type_of_expenses (classify into ONLY one of these exact categories: ${expenseCategories}. Pick the closest match.)\\n\\nReturn a single JSON object. No markdown, no explanation.`\n      }\n    ]\n  }],\n  generationConfig: {\n    maxOutputTokens: 8192\n  }\n});\n\nreturn [{\n  json: {\n    geminiBody,\n    industry,\n    email,\n    expenseCategories,\n    mimeType: finalMimeType\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [208, 208],
+      "id": "acdf7c68-55e5-40bf-8e8b-49d85be08227",
+      "name": "Prepare Gemini Payload"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=YOUR_GEMINI_API_KEY",
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "JSON",
+        "body": "={{ $json.geminiBody }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [432, 208],
+      "id": "3dae9369-5257-479c-9185-671ab1457efa",
+      "name": "Gemini Vision OCR"
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $('Gemini Vision OCR').item.json.candidates[0].content.parts[0].text;\nconst cleaned = raw.replace(/```json|```/g, '').trim();\nconst inv = JSON.parse(cleaned);\n\nconst industry = $('Get File IDs').item.json.industry;\nconst email = $('Get File IDs').item.json.email;\nconst expenseCategories = $('Get File IDs').item.json.expenseCategories;\n\n// Handle products — could be array or comma-separated string\nlet products = [];\nif (Array.isArray(inv.products)) {\n  products = inv.products;\n} else if (typeof inv.products === 'string') {\n  products = inv.products.split(',').map(p => p.trim()).filter(p => p.length > 0);\n}\n\n// If no products found, still write one row\nif (products.length === 0) {\n  products = ['UNKNOWN'];\n}\n\n// Return one item per product\nreturn products.map(product => ({\n  json: {\n    timestamp:        new Date().toISOString(),\n    industry:         industry,\n    email:            email,\n    invoice_no:       inv.invoice_no       ?? 'UNKNOWN',\n    supplier_name:    inv.supplier_name    ?? 'UNKNOWN',\n    date_of_invoice:  inv.date_of_invoice  ?? '',\n    product:          product,\n    type_of_expenses: inv.type_of_expenses ?? ''\n  }\n}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [0, 432],
+      "id": "15e03548-3931-4547-9d05-fed4aa9c0139",
+      "name": "Parse Invoice Fields"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Invoice result",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "timestamp": "={{ $json.timestamp }}",
+            "industry": "={{ $json.industry }}",
+            "date_of_invoice": "={{ $json.date_of_invoice }}",
+            "invoice_no": "={{ $json.invoice_no }}",
+            "supplier_name": "={{ $json.supplier_name }}",
+            "type_of_expenses": "={{ $json.type_of_expenses }}",
+            "product": "={{ $json.product }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            { "id": "timestamp", "displayName": "timestamp", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "industry", "displayName": "industry", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "date_of_invoice", "displayName": "date_of_invoice", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "invoice_no", "displayName": "invoice_no", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "supplier_name", "displayName": "supplier_name", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "product", "displayName": "product", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true, "removed": false },
+            { "id": "type_of_expenses", "displayName": "type_of_expenses", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [208, 432],
+      "id": "b178ce75-16a2-46c1-a35c-b0dc6166dba4",
+      "name": "Append row in sheet"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Parse Invoice Fields').item.json.email }}",
+        "subject": "=✅ Invoice Processing Complete — {{ $('Parse Invoice Fields').item.json.supplier_name }}",
+        "message": "=<h2>✅ Invoice Processing Complete</h2>\n<p>Hi {{ $('Parse Invoice Fields').item.json.supplier_name }},</p>\n<p>Your invoice files have been processed successfully. All extracted data has been logged to your Invoice Results sheet.</p>\n<table border=\"1\" cellpadding=\"6\" style=\"border-collapse:collapse\">\n  <tr><td><b>Supplier</b></td><td>{{ $('Parse Invoice Fields').item.json.supplier_name }}</td></tr>\n  <tr><td><b>Industry</b></td><td>{{ $('Parse Invoice Fields').item.json.industry }}</td></tr>\n  <tr><td><b>Processed At</b></td><td>{{ $now }}</td></tr>\n</table>\n<br>\n<p>📊 <a href=\"https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEET_ID\">Click here to view your Invoice Results</a></p>\n<p>To download as Excel: File → Download → Microsoft Excel (.xlsx)</p>\n<br>\n<p>This email was sent automatically by your Invoice OCR system.</p>",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [0, 0],
+      "id": "98f39b58-43e1-49c0-8068-9416f6698a7f",
+      "name": "Send Results Email"
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $json.fileId }}",
+          "mode": "id"
+        },
+        "options": {
+          "binaryPropertyName": "data"
+        }
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [0, 208],
+      "id": "eb84e2af-570e-4370-b4a8-fd6ac8d6465a",
+      "name": "Download File"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Google Sheets Trigger": {
+      "main": [[{ "node": "Get File IDs", "type": "main", "index": 0 }]]
+    },
+    "Get File IDs": {
+      "main": [[{ "node": "Loop Over Files", "type": "main", "index": 0 }]]
+    },
+    "Loop Over Files": {
+      "main": [
+        [{ "node": "Send Results Email", "type": "main", "index": 0 }],
+        [{ "node": "Download File", "type": "main", "index": 0 }]
+      ]
+    },
+    "Prepare Gemini Payload": {
+      "main": [[{ "node": "Gemini Vision OCR", "type": "main", "index": 0 }]]
+    },
+    "Gemini Vision OCR": {
+      "main": [[{ "node": "Parse Invoice Fields", "type": "main", "index": 0 }]]
+    },
+    "Parse Invoice Fields": {
+      "main": [[{ "node": "Append row in sheet", "type": "main", "index": 0 }]]
+    },
+    "Append row in sheet": {
+      "main": [[{ "node": "Loop Over Files", "type": "main", "index": 0 }]]
+    },
+    "Download File": {
+      "main": [[{ "node": "Prepare Gemini Payload", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "timezone": "Asia/Kuala_Lumpur",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "versionId": "",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": ""
+  },
+  "id": "",
+  "tags": []
+}
